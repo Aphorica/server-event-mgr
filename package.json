@@ -1,0 +1,10 @@
+{
+  "name": "@aph/server-event",
+  "version": "0.1.0",
+  "description": "Handles Server-events",
+  "main": "index.js",
+  "repository": "<pending>",
+  "author": "Aphorica.com",
+  "license": "MIT",
+  "private": true
+}
