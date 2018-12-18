@@ -1,7 +1,7 @@
 {
-  "name": "@aph/server-event",
+  "name": "@aph/server-event-mgr",
   "version": "0.1.0",
-  "description": "Handles Server-events",
+  "description": "Handles Server-events on the server side",
   "main": "index.js",
   "repository": "<pending>",
   "author": "Aphorica.com",

@@ -7,7 +7,7 @@ const CLEANUP_STALE_ENTRIES_THRESHOLD = 43200000;
 let connections = {};
 let cleanupTimerID = -1;
 let notifyListenersChangedFlag = false;
-let defaultPrefix = '/sse/';
+let DEFAULT_PREFIX = '/sse/';
 
 let verbose = false;
 
@@ -147,6 +147,7 @@ function asyncCleanupRegistered() {
 }
 
 function startCleanupInterval() {
+  console.log('ServerEvent:startCleanupInterval');
   function doCleanup() {
     cleanupTimerID = setTimeout(function() {
       clearTimeout(cleanupTimerID);
@@ -183,42 +184,52 @@ function stopCleanupInterval() {
 ///////////////////////////////////////////////////////////////////
 
 let ServerEventMgr = {
-  createRouter(prefix) {
+  prefix: DEFAULT_PREFIX,
+  createRouter(_prefix) {
     let express = require('express');
     let serverEventRouter = express.Router();
 
-    if (prefix === undefined) {
-      prefix = defaultPrefix;
-    }
+    if (_prefix !== undefined)
+      this.prefix = _prefix;
 
     serverEventRouter.use(sseHandler);
 
-    serverEventRouter.get(prefix + 'list-registrants', function(req, res) {
+    serverEventRouter.get(this.prefix + 'list-registrants', function(req, res) {
       res.send(ServerEventMgr.getListenersJSON());
     });
     
-    serverEventRouter.get(prefix + 'clear-registrants', async function(req, res) {
+    serverEventRouter.get(this.prefix + 'clear-registrants', async function(req, res) {
       await ServerEventMgr.unregisterAllListeners();
       res.send("ok");
     });
     
-    serverEventRouter.get(prefix + 'make-id/:name', function(req,rsp) {
+    serverEventRouter.get(this.prefix + 'make-id/:name', function(req,res) {
       let id = ServerEventMgr.getUniqueID(req.params.name);
-      rsp.send(id);
+      res.send(id);
     });
     
     /**
      * register a listener
      */
-    serverEventRouter.get(prefix + 'register-listener/:id', function(req, res) {
+    serverEventRouter.get(this.prefix + 'register-listener/:id', function(req, res) {
       let id = req.params.id;
       ServerEventMgr.registerListener(id, res);
               // res delegated to the ServerEventMgr -- 
               // don't respond here.
     });
     
-    serverEventRouter.get(prefix + 'disconnect-registrant/:id', function(req,res){
+    serverEventRouter.get(this.prefix + 'disconnect-registrant/:id', function(req,res){
       ServerEventMgr.unregisterListener(req.params.id);
+      res.send('ok');
+    });
+
+    serverEventRouter.get(this.prefix + 'trigger-ad-hoc/:id', function(req, res) {
+      ServerEventMgr.triggerAdHocResponse(req.params.id);
+      res.send('ok');
+    });
+
+    serverEventRouter.get(this.prefix + 'trigger-cleanup', function(req, res){
+      ServerEventMgr.triggerCleanup();
       res.send('ok');
     });
 
@@ -249,22 +260,15 @@ let ServerEventMgr = {
     return id;
   },
   registerListener(id, res) {
-    resObj = id in connections? connections[id] : {},
-    timeStamp = Date.now();
+    let resObj = {
+      notifyRes: res,
+      'registered-ts': Date.now()
+    };
 
     log('in register-listener, id: ' + id);
 
-    if (!(id in connections)) {
-      startCleanupInterval();
-      resObj['notifyRes'] = res;
-      log(' --> server registered id: ' + id);
-    } else {
-      log(' --> is in connections');
-    }
-
     res.sseSetup();
     res.sseSend(RETRY_INTERVAL, "registered^" + id);
-    resObj['registered-ts'] = timeStamp;
     connections[id] = resObj;
   },
   isRegistered(id) {
@@ -291,6 +295,16 @@ let ServerEventMgr = {
     }
 
     return JSON.stringify(rspData);
+  },
+  triggerAdHocResponse(idKey) {
+            // for debugging
+    if (idKey in connections)
+      connections[idKey].notifyRes.sseSend(0, "ad-hoc");
+  },
+  triggerCleanup() {
+    stopCleanupInterval();
+    asyncCleanupRegistered();
+    startCleanupInterval();
   },
   notifyCompletions(id, taskid) {
     let name = id.split('_')[0];
@@ -324,5 +338,7 @@ let ServerEventMgr = {
     })
   }
 };
+
+startCleanupInterval();
 
 module.exports = ServerEventMgr;
