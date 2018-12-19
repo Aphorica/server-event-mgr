@@ -1,11 +1,11 @@
-# @aph/server-event-mgr
+# @aphorica/server-event-mgr
 
 Implements a server-event service in node _Express_.
 
 See also:
- - @aph/server-event-client - client-side class for invoking
+ - [@aphorica/server-event-client][1] - client-side class for invoking
    this via rest api.
- - @aph/server-event-demo - docker-compose file that sets up
+ - [server-event-demo][2] - docker-compose file that sets up
    a development environment to test/demo.
 
 Implements a server-event service in node express.
@@ -227,3 +227,5 @@ Forces the server to send a notification.</dd>
 <dd>
 Forces an immediate invocation of the cleanup mechanism.</dd>
 </dl>
+[1]:https://www.npmjs.com/package/@aphorica/server-event-client
+[2]:https://github.com/Aphorica/server-event-demo

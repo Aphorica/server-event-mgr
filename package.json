@@ -1,10 +1,10 @@
 {
-  "name": "@aph/server-event-mgr",
+  "name": "@aphorica/server-event-mgr",
   "version": "0.1.0",
-  "description": "Handles Server-events on the server side",
+  "description": "Manages server-events on the server side",
   "main": "index.js",
-  "repository": "<pending>",
-  "author": "Aphorica.com",
+  "repository": "https://github.com/Aphorica/server-event-mgr",
+  "author": "Rick Berger - Aphorica, Inc. <gbergeraph@gmail.com>",
   "license": "MIT",
-  "private": true
+  "private": false
 }
