@@ -32,7 +32,7 @@ a threshold is considered dead and removed on the next cleanup
 pass.
 
 To prevent active connections going stale, the client sends _keep-alive_ requests on regular intervals (part of the client
-ServerEvent implementation.)  This request
+_EventSource_ implementation.)  This request
 reinvokes the client registration mechanism in the server, with
 the original id. 
 In that invocation, a new timestamp and the new response are
