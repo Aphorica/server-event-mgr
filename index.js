@@ -147,7 +147,7 @@ function asyncCleanupRegistered() {
 }
 
 function startCleanupInterval() {
-  console.log('ServerEvent:startCleanupInterval');
+  log('ServerEvent:startCleanupInterval');
   function doCleanup() {
     cleanupTimerID = setTimeout(function() {
       clearTimeout(cleanupTimerID);
@@ -219,6 +219,7 @@ let ServerEventMgr = {
     });
     
     serverEventRouter.get(this.prefix + 'disconnect-registrant/:id', function(req,res){
+      log('ServerEventMgr:disconnect-rgistrant, id: ' + req.params.id);
       ServerEventMgr.unregisterListener(req.params.id);
       res.send('ok');
     });
