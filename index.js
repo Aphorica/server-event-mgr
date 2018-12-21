@@ -57,7 +57,7 @@ function sseHandler(req, res, next) {
 /////////////////////////////////////////////////////////////////////
 
 function asyncNotifyListeners(listenKey) {
-  log('ServerEventMgr:in asyncNotifyListeners, listenKey: ' + listenKey);
+  // log('ServerEventMgr:in asyncNotifyListeners, listenKey: ' + listenKey);
   return new Promise(function(acc, rej) {
     let sseKeys = Object.keys(connections);
             // work on a copy of keys
@@ -86,11 +86,13 @@ function asyncNotifyListeners(listenKey) {
             let duration = Date.now() - sseRsp['registered-ts'];
 
             if (!('taskid' in sseRsp) &&
-                 duration <= CLEANUP_STALE_ENTRIES_THRESHOLD) {
+                 duration <= CLEANUP_STALE_ENTRIES_THRESHOLD &&
+                 sseRsp.listenKeys.indexOf(listenKey) >= 0) {
                       // filter out:
                       //  - anything that has a taskid -- 
                       //    that's sent on completion.
                       //  - stale entries
+                      //  - doesn't have listenKey
 
               sseRsp.notifyRes.sseSend(RETRY_INTERVAL,
                                        'notify^' + listenKey);
@@ -260,8 +262,8 @@ let ServerEventMgr = {
   setVerbose(flag) {
     verbose = flag;
   },
-  notifyListeners(filterKeys) {
-    asyncNotifyListeners(filterKeys);
+  notifyListeners(listenKey) {
+    asyncNotifyListeners(listenKey);
   },
   getUniqueID(name) {
     let id = '';
@@ -275,10 +277,11 @@ let ServerEventMgr = {
     return id;
   },
   registerListener(id, res) {
-    let resObj = {
-      notifyRes: res,
-      'registered-ts': Date.now()
-    };
+    let resObj = (id in connections)?
+      connections[id] : { listenKeys: [] };
+
+    resObj.notifyRes = res;
+    resObj['registered-ts'] = Date.now(),
 
     log('in register-listener, id: ' + id);
 
@@ -300,6 +303,10 @@ let ServerEventMgr = {
       stopCleanupInterval();
     if (this.listenersChangedKey)
       this.notifyListeners(this.listenersChangedKey);
+  },
+  addListenKey(id, listenKey) {
+    let sseRsp = connections[id];
+    sseRsp.listenKeys.push(listenKey);
   },
   getListenersJSON() {
     let idKeys = Object.keys(connections);
