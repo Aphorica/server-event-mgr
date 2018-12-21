@@ -1,12 +1,14 @@
 
 const RETRY_INTERVAL = 120000;
-const CLEANUP_INTERVAL = 3600000;
-const CLEANUP_STALE_ENTRIES_THRESHOLD = 43200000;
-          // 12hrs
+const CLEANUP_INTERVAL = 240000;
+const CLEANUP_STALE_ENTRIES_THRESHOLD = 3600000;
+          // 1 hr - no contact longer than that, it's a dead entry
+
+const LOOP_BURST_COUNT = 100;
+          // run through this many disqualifications in loops
 
 let connections = {};
 let cleanupTimerID = -1;
-let notifyListenersChangedFlag = false;
 let DEFAULT_PREFIX = '/sse/';
 
 let verbose = false;
@@ -54,43 +56,64 @@ function sseHandler(req, res, next) {
 //
 /////////////////////////////////////////////////////////////////////
 
-function asyncNotifyListenersChanged() {
+function asyncNotifyListeners(listenKey) {
+  log('ServerEventMgr:in asyncNotifyListeners, listenKey: ' + listenKey);
   return new Promise(function(acc, rej) {
-    let sseRsps = Object.values(connections);
-    if (sseRsps.length === 0)
+    let sseKeys = Object.keys(connections);
+            // work on a copy of keys
+
+    if (sseKeys.length === 0)
       acc(true);
 
     else {
-      let msg = "listeners-changed"; 
-                  // work on a copy
-
-      function notifyListenersChanged(ix) {
-        while(true) {
-          if (ix >= sseRsps.length) {
+      function notifyListeners(ix) {
+        let burstIX = 0;
+        let thisKey;
+        do {
+          if (ix >= sseKeys.length) {
             acc(true);
-            break;
+            return;
+                    // done
           }
 
-          if (sseRsps[ix]['registered-ts'] !== 0) {
-            sseRsps[ix].notifyRes.sseSend(RETRY_INTERVAL, msg);
-            break;
-          }
-          ++ix;
-        }
+          thisKey = sseKeys[ix++];
 
-        setImmediate(notifyListenersChanged.bind(null, ++ix));
+          if (thisKey in connections) {
+                      // check the live connection -
+                      // may have been deleted
+
+            let sseRsp = connections[thisKey];
+            let duration = Date.now() - sseRsp['registered-ts'];
+
+            if (!('taskid' in sseRsp) &&
+                 duration <= CLEANUP_STALE_ENTRIES_THRESHOLD) {
+                      // filter out:
+                      //  - anything that has a taskid -- 
+                      //    that's sent on completion.
+                      //  - stale entries
+
+              sseRsp.notifyRes.sseSend(RETRY_INTERVAL,
+                                       'notify^' + listenKey);
+              break;
+            }
+          }
+        } while (++burstIX < LOOP_BURST_COUNT);
+
+        setImmediate(notifyListeners.bind(null, ix));
+                  // 
       }
 
-      notifyListenersChanged(0);
+      notifyListeners(0);
     }
   });
 }
 
-function asyncCleanupRegistered() {
+function asyncCleanupRegistered(changedFilterKey) {
   return new Promise(function(acc, rej) {
     log('in asyncCleanupRegistered');
     let idKeys = Object.keys(connections);
                     // pull a copy of the keys
+    let cleaned = false;
 
     if (idKeys.length === 0) {
       log(' --> no connections (no keys)')
@@ -98,29 +121,21 @@ function asyncCleanupRegistered() {
     }
     else {
       function cleanupRegistered(ix) {
-        if (ix >= idKeys.length)
-          acc(true);
+        let idKey, burstIX = 0;
 
-        else {
-          let idKey, sseRsp, duration;
+        do {
+                // loop through the keys
 
-          while (true) {
-                  // loop through the keys
+          if (ix >= idKeys.length) {
+            acc(true);
+            return;
+                  // done
+          }
 
-            if (ix >= idKeys.length) {
-              acc(true);
-              break;
-                    // done
-            }
-
-            idKey = idKeys[ix];
-            if (!connections[idKey])
-              continue;
-                    // got deleted in between calls -
-                    // go on to next without exiting
-
-            sseRsp = connections[idKey];
-            duration = Date.now() - sseRsp['registered-ts'];
+          idKey = idKeys[ix++];
+          if ((idKey in connections)) {
+            let sseRsp = connections[idKey];
+            let duration = Date.now() - sseRsp['registered-ts'];
             log(' --> duration for id: ' + idKey + ', registered-ts: ' +
                         sseRsp['registered-ts'] + ' = ' +
                         duration/1000);
@@ -128,39 +143,40 @@ function asyncCleanupRegistered() {
             if (duration > CLEANUP_STALE_ENTRIES_THRESHOLD) {
               log(' --> removing: ' + idKey + ' from connections');
               delete connections[idKey];
+              cleaned = true;
                           // thpthpthp - gone.
               break;
             }
-                    // else loop around for the next
-            ++ix;
           }
-          
-          setImmediate(cleanupRegistered.bind(null, ++ix));
-                    // trigger the next iteration
-        }
+                  // else loop around for the next
+        } while (++burstIX < LOOP_BURST_COUNT);
+        
+        setImmediate(cleanupRegistered.bind(null, ix));
+                  // trigger the next iteration
       }
 
       cleanupRegistered(0);
                     // initial call
+
+      if (cleaned && changedFilterKey)
+        asyncNotifyListeners(changedFilterKey);
     }
   });
 }
 
-function startCleanupInterval() {
+function startCleanupInterval(changedFilterKey) {
   log('ServerEvent:startCleanupInterval');
   function doCleanup() {
     cleanupTimerID = setTimeout(function() {
       clearTimeout(cleanupTimerID);
       cleanupTimerID = 0;
-      asyncCleanupRegistered()
+      asyncCleanupRegistered(changedFilterKey)
       .then(function(rsp){
         if (Object.keys(connections).length === 0)
           stopCleanupInterval();
         else {
-          if (notifyListenersChangedFlag)
-            setTimeout(asyncNotifyListenersChanged);
-          if (cleanupTimerID === 0)
-            setImmediate(doCleanup);
+          console.assert(cleanupTimerID === 0, 'cleanup timer id should be 0');
+          setImmediate(doCleanup);
         }
       })
     }, CLEANUP_INTERVAL);
@@ -188,6 +204,7 @@ let ServerEventMgr = {
   createRouter(_prefix) {
     let express = require('express');
     let serverEventRouter = express.Router();
+    let listenersChangedKey = '';
 
     if (_prefix !== undefined)
       this.prefix = _prefix;
@@ -240,14 +257,11 @@ let ServerEventMgr = {
     stopCleanupInterval();
     connections = {};
   },
-  setNotifyListenersChanged(flag) {
-    notifyListenersChangedFlag = flag;
-  },
   setVerbose(flag) {
     verbose = flag;
   },
-  notifyListenersChanged() {
-    asyncNotifyListenersChanged();
+  notifyListeners(filterKeys) {
+    asyncNotifyListeners(filterKeys);
   },
   getUniqueID(name) {
     let id = '';
@@ -271,6 +285,10 @@ let ServerEventMgr = {
     res.sseSetup();
     res.sseSend(RETRY_INTERVAL, "registered^" + id);
     connections[id] = resObj;
+    if (this.listenersChangedKey)
+      this.notifyListeners(this.listenersChangedKey);
+    if  (Object.keys(connections).length === 1)
+      startCleanupInterval(this.listenersChangedKey);
   },
   isRegistered(id) {
     return(id in connections);
@@ -280,6 +298,8 @@ let ServerEventMgr = {
       delete connections[id];
     if (Object.keys(connections).length === 0)
       stopCleanupInterval();
+    if (this.listenersChangedKey)
+      this.notifyListeners(this.listenersChangedKey);
   },
   getListenersJSON() {
     let idKeys = Object.keys(connections);
@@ -339,7 +359,5 @@ let ServerEventMgr = {
     })
   }
 };
-
-startCleanupInterval();
 
 module.exports = ServerEventMgr;
