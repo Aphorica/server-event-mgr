@@ -267,11 +267,12 @@ let ServerEventMgr = {
   },
   getUniqueID(name) {
     let id = '';
+    let sfx = 0;
   
     log('server in make-id: ' + name);
     
     do {
-      id = [name, Math.random().toString(36).substring(7)].join('_');
+      id = [name, Date.now(), sfx++].join('_');
     } while (id in connections);
 
     return id;
