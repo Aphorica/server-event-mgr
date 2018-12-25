@@ -243,11 +243,6 @@ let ServerEventMgr = {
       res.send('ok');
     });
 
-    serverEventRouter.get(this.prefix + 'trigger-ad-hoc/:id', function(req, res) {
-      ServerEventMgr.triggerAdHocResponse(req.params.id);
-      res.send('ok');
-    });
-
     serverEventRouter.get(this.prefix + 'trigger-cleanup', function(req, res){
       ServerEventMgr.triggerCleanup();
       res.send('ok');
@@ -324,11 +319,6 @@ let ServerEventMgr = {
     }
 
     return JSON.stringify(rspData);
-  },
-  triggerAdHocResponse(idKey) {
-            // for debugging
-    if (idKey in connections)
-      connections[idKey].notifyRes.sseSend(0, "ad-hoc");
   },
   triggerCleanup() {
     stopCleanupInterval();

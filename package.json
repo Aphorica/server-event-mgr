@@ -1,6 +1,6 @@
 {
   "name": "@aphorica/server-event-mgr",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Manages server-events on the server side",
   "main": "index.js",
   "repository": "https://github.com/Aphorica/server-event-mgr",
