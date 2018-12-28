@@ -26,10 +26,8 @@ function log(str) {
 ///////////////////////////////////////////////////////////////////
 function sseHandler(req, res, next) {
   res.sseSetup = function(close) {
-    let rspCode = close? 404 : 200;  // this isn't working on Chrome
-    let contentType = close? 'text/plaintext' : 'text/event-stream';
-    res.writeHead(rspCode, {
-      'Content-Type': contentType,
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
       'Access-Control-Allow-Origin': '*'
