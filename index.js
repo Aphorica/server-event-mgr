@@ -19,6 +19,20 @@ function log(str) {
   }
 }
 
+function getIdsForUsernames(usernames) {
+  let retIds = [];
+  let connectionKeys = Object.keys(connections), thisKey, thisName;
+
+  for(let ix = 0; ix < connectionKeys.length; ++ix) {
+    thisKey = connectionKeys[ix];
+    thisName = thisKey.split('_')[0];
+    if (usernames.indexOf(thisName) > -1)
+      retIds.push(thisKey);
+  }
+
+  return retIds;
+}
+
 ///////////////////////////////////////////////////////////////////
 //
 // beg sse funcs (attached to res)
@@ -54,11 +68,11 @@ function sseHandler(req, res, next) {
 //
 /////////////////////////////////////////////////////////////////////
 
-function asyncNotifyListeners(listenKey) {
+function asyncNotifyListeners(listenKey, listeners) {
   // log('ServerEventMgr:in asyncNotifyListeners, listenKey: ' + listenKey);
   return new Promise(function(acc, rej) {
-    let sseKeys = Object.keys(connections);
-            // work on a copy of keys
+    let sseKeys = listeners? getIdsForUsernames(listeners) :
+                  Object.keys(connections);
 
     if (sseKeys.length === 0)
       acc(true);
